@@ -2,7 +2,9 @@
   "Handle all the aspectd related to the i18n of the components."
   (:require  [schema.core :as s :include-macros true]
              [clojure.string :as str]
-             [om.core :as om :include-macros true]
+             [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+                                       get-node create-component get-i18n-info
+                                       build-component]]
              [om-inputs.utils :refer [full-name]]))
 
 ;_________________________________________________
@@ -87,8 +89,8 @@
 (defn comp-i18n
   "Get the specific i18n labels for the component and the language"
   [owner comp-name sch opts]
-  (let [full-i18n (om/get-shared owner :i18n)
-        lang (om/get-state owner :lang)]
+  (let [full-i18n (get-i18n-info owner :i18n)
+        lang (get-state owner :lang)]
     (when full-i18n
       (when (:validate-i18n-keys opts) (s/validate I18NSchema full-i18n))
       (i18n-comp-lang-memo sch comp-name lang full-i18n opts))))
@@ -149,4 +151,3 @@
 (defn info-title
   [opts]
   (get-in opts [:i18n :info-title]))
-

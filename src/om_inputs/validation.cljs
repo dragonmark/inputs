@@ -1,13 +1,16 @@
 (ns om-inputs.validation
   (:require-macros [cljs.core.async.macros :refer [go]])
-  (:require [om.core :as om :include-macros true]
-            [clojure.set :as st]
-            [clojure.string :as str]
-            [jkkramer.verily :as v :refer [validation->fn]]
-            [schema.core :as s :include-macros true]
-            [schema.coerce :as coerce]
-            [om-inputs.schemas :as su :refer [ sch-field sch-business-state sch-field-state]]
-            [om-inputs.date-utils :as d]))
+  (:require
+   [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+                             get-node create-component get-i18n-info
+                             build-component]]
+   [clojure.set :as st]
+   [clojure.string :as str]
+   [jkkramer.verily :as v :refer [validation->fn]]
+   [schema.core :as s :include-macros true]
+   [schema.coerce :as coerce]
+   [om-inputs.schemas :as su :refer [ sch-field sch-business-state sch-field-state]]
+   [om-inputs.date-utils :as d]))
 
 
 #_(defmulti valider (fn [vspec] (first vspec)))
@@ -327,10 +330,10 @@
 (defn field-validation!
   "Validate a single field of the local business state and update the local state."
   ([owner f]
-   (let [{:keys [inputs] :as state} (om/get-state owner)]
+   (let [{:keys [inputs] :as state} (get-state owner)]
     (let [new-business-state (field-validation f inputs state)]
       (when (not= inputs new-business-state)
-       (om/set-state! owner [:inputs] new-business-state))))))
+       (set-state! owner [:inputs] new-business-state))))))
 
 
 (defn full-validation

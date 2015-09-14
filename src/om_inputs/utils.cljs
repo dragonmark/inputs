@@ -1,7 +1,10 @@
 (ns om-inputs.utils
-  (:require [clojure.string :as str]
-            [om.core :as om :include-macros true]
-            [om.dom :as dom :include-macros true]))
+  (:require
+   [clojure.string :as str]
+   [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+                             get-node create-component get-i18n-info
+                             build-component]]
+            ))
 
 
 
@@ -42,8 +45,8 @@
   [render? owner cpt style]
   (let [args [owner [:dyn-opts cpt :className] style]]
     (if render?
-      (apply om/set-state! args)
-      (apply om/set-state-nr! args))))
+      (apply set-state! args)
+      (apply set-state-nr! args))))
 
 (def set-comp-class!
   (partial set-comp-class!* true))
