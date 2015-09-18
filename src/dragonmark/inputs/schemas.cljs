@@ -1,4 +1,4 @@
-(ns om-inputs.schemas
+(ns dragonmark.inputs.schemas
   (:require [schema.core :as s :include-macros true]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
 
@@ -58,4 +58,3 @@
               (s/optional-key :layout)    s/Str
               (s/optional-key :label-order)   s/Bool
               (s/optional-key :post-typing) s/Any}})
-

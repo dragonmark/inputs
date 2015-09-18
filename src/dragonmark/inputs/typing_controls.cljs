@@ -1,7 +1,7 @@
-(ns om-inputs.typing-controls
+(ns dragonmark.inputs.typing-controls
   (:require [clojure.string :as str]
             [schema.core :as s :include-macros true]
-            [om-inputs.schema-utils :refer [sch-type]]
+            [dragonmark.inputs.schema-utils :refer [sch-type]]
             [goog.string :as gstr]))
 
 

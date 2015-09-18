@@ -1,4 +1,4 @@
-(ns om-inputs.date-utils
+(ns dragonmark.inputs.date-utils
   (:require [clojure.string :as str])
   (:import [goog.i18n DateTimeFormat DateTimeParse]
            [goog.ui InputDatePicker]
@@ -10,7 +10,7 @@
 ;          Handle Date Format Parse               |
 ;_________________________________________________|
 
-(def default-fmt "dd/MM/yyyy")
+(def default-fmt "yyyy/MM/dd")
 
 
 (def format-map
@@ -85,7 +85,9 @@
              (this-as this
                       (let [el (.getElement this)]
                        (set! (.-value el) v)))))
-  (InputDatePicker. (DateTimeFormat. f) (DateTimeParse. f) nil nil)))
+     (let [ret (InputDatePicker. (DateTimeFormat. f) (DateTimeParse. f) nil nil)]
+       ret
+       )))
 
 
 ;_________________________________________________

@@ -1,21 +1,21 @@
-(ns ^:figwheel-always om-inputs.core
+(ns ^:figwheel-always dragonmark.inputs.core
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require
-   [cljs.core.async :refer [chan put! >! <! alts!]]
+   [cljs.core.async :refer [chan put! >! <! alts! close!]]
    [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-   [schema.core :as s :include-macros true]
+   [schema.core :as s :include-macros ]
    [schema.coerce :as coerce]
    [clojure.string :as str]
-   [om-inputs.utils :refer [full-name ->int]]
-   [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+   [dragonmark.inputs.utils :refer [full-name ->int]]
+   [dragonmark.inputs.extern :refer [get-state set-state! update-state!
                              get-node create-component get-i18n-info
                              build-component]]
-   [om-inputs.date-utils :as d]
-   [om-inputs.schema-utils :as su :refer [sch-type]]
-   [om-inputs.schemas :refer [sch-business-state sch-field-state SchOptions]]
-   [om-inputs.validation :as va]
-   [om-inputs.i18n :as i :refer [comp-i18n label desc desc? data error ph info]]
-   [om-inputs.typing-controls :refer [build-typing-control]]
+   [dragonmark.inputs.date-utils :as d]
+   [dragonmark.inputs.schema-utils :as su :refer [sch-type]]
+   [dragonmark.inputs.schemas :refer [sch-business-state sch-field-state SchOptions]]
+   [dragonmark.inputs.validation :as va]
+   [dragonmark.inputs.i18n :as i :refer [comp-i18n label desc desc? data error ph info]]
+   [dragonmark.inputs.typing-controls :refer [build-typing-control]]
    [jkkramer.verily :as v]
    [goog.events]
             [sablono.core :as html :refer-macros [html]]))
@@ -75,13 +75,14 @@
 
 (defmethod magic-input "enum"
   [{{:keys [attrs i18n] :as options} :opts}]
-  [:div attrs
-   (into
-    [:option {:value ""} ""]
-    (map (fn [code]
-           [:option {:value code}
-            (enum-label i18n code)])
-         (choose-iterator options)))])
+
+  (into
+   [:select attrs
+    [:option {:value ""} ""]]
+   (map (fn [code]
+          [:option {:value code}
+           (enum-label i18n code)])
+        (choose-iterator options))))
 
 
 (defn radio-group
@@ -97,7 +98,9 @@
                                  :className ""
 
                                  :value     code
-                                 :onClick   #(put! chan [k code])})]
+                                 :onClick   #(do
+                                               (put! chan [k code])
+                                               nil)})]
                    (enum-label i18n code)]])
               (choose-iterator options)))])
 
@@ -115,12 +118,17 @@
   [type k value i18n chan]
   (fn [code]
     [:button  {:type      type
-                :active    (= code value)
-                :className (styles "btn" (if (= code value) "btn-primary" "btn-default"))
-                :key       (str (full-name k) "/" code)
-                :id        (str (full-name k) "/" code)
-                :value     code
-                :onClick   #(put! chan [k code])}
+               :active    (= code value)
+               :className (styles "btn" (if (= code value) "btn-primary" "btn-default"))
+               :key       (str (full-name k) "_" code)
+               :id        (str (full-name k) "_" code)
+               :value     code
+               :onChange  #(-> nil)
+               :onClick   #(do
+                             (put! chan [k code])
+                             (put! chan [:validate k])
+
+                             nil)}
                (enum-label i18n code)]))
 
 (defmethod magic-input "btn-group"
@@ -153,16 +161,21 @@
                :className style
                :onClick   #(when (or (nil? min)
                                      (and min (<= (int min) (minus value))))
-                             (put! chan [k (str (minus value))]))} "-"]
+                             (put! chan [k (str (minus value))])
+                             (put! chan [:validate k])
+                             nil)} "-"]
      [:input {:className "input-stepper"
               :size      (if (str/blank? value) 1 (count (str value)))
+              :onChange  #(-> nil)
               :value     value}]
 
      [:button {:type      "button"
                :className style
                :onClick   #(when (or (nil? max)
                                      (and max (<= (plus value) (int max))))
-                             (put! chan [k (str (plus value))]))} "+"]]))
+                             (put! chan [k (str (plus value))])
+                             (put! chan [:validate k])
+                             nil)} "+"]]))
 
 
 #_(defmethod magic-input s/Inst
@@ -177,11 +190,15 @@
     [:input (merge attrs
                    {:placeholder d/default-fmt
                     :value       (d/display-date date)
-                    :onChange    #()
+                    :onChange    #(do
+                                    (put! chan [k (e-value %)])
+                                    (put! chan [:validate k])
+                                    nil)
                     :onBlur      #(let [v (e-value %)]
                                     (put! chan [k (when-not (str/blank? v) (d/parse v))])
                                     (put! chan [:focus k])
-                                    (put! chan [:validate k]))})]))
+                                    (put! chan [:validate k])
+                                    nil)})]))
 
 (defmethod magic-input "date"
   [{{:keys [k attrs]} :opts chan :chan}]
@@ -189,18 +206,25 @@
     [:input (merge attrs
                    {:type     "date"
                     :value    (d/display-date "yyyy-MM-dd" date)
-                    :onChange #()
+                    :onChange #(do
+                                 (put! chan [k (e-value %)])
+                                 (put! chan [:validate k])
+                                 nil)
                     :onBlur   #(let [v (e-value %)]
                                  (put! chan [k (when-not (str/blank? v) (d/parse "yyyy-MM-dd" v))])
                                  (put! chan [:focus k])
-                                 (put! chan [:validate k]))})]))
+                                 (put! chan [:validate k])
+                                 nil)})]))
 
 
 (defmethod magic-input s/Bool
   [{{:keys [k attrs]} :opts chan :chan}]
   (let [value (:value attrs)]
     [:input (merge attrs {:checked  (js/Boolean value)
-                          :onChange #(put! chan [k (-> % .-target .-checked)])
+                          :onChange #(do
+                                       (put! chan [k (-> % .-target .-checked)])
+                                       (put! chan [:validate k])
+                                       nil)
                           :type     "checkbox"})]))
 
 
@@ -217,8 +241,11 @@
   [{{:keys [attrs k]} :opts chan :chan}]
   [:input (merge attrs {:type           "button"
                         :className      "btn"
-                        :preventDefault true
-                        :onClick        #(put! chan [k (js/Date.)])})])
+                        :preventDefault  true
+                        :onClick        #(do
+                                           (put! chan [k (js/Date.)])
+                                           (put! chan [:validate k])
+                                           nil)})])
 
 
 (defmethod magic-input "email"
@@ -226,6 +253,10 @@
   [:input (merge  {:type "email"
                    :autoCapitalize "off"
                    :autoCorrect "off"} attrs)])
+
+(defmethod magic-input "password"
+  [{{:keys [attrs]} :opts}]
+  [:input (merge  {:type "password"} attrs)])
 
 
 (defmethod magic-input :default
@@ -297,11 +328,11 @@
   [k node chan f]
   (let [dp (d/date-picker f)]
     (.decorate dp node )
-    (goog.events/listen dp goog.ui.DatePicker.Events.CHANGE #(do
-                                                              (put! chan [k  (d/goog-date->js-date (.-date %))])
-                                                              (put! chan [:validate k])))))
-
-
+    (goog.events/listen dp goog.ui.DatePicker.Events.CHANGE
+                        #(do
+                           (put! chan [k  (d/goog-date->js-date (.-date %))])
+                           (put! chan [:validate k])
+                           nil))))
 
 (defn handle-date-fields!
   [owner f opts]
@@ -329,30 +360,31 @@
   :type serves to build the css class tooltip-type
   :action attach a function when closing the tooltip"
   [app owner opts]
-  (create-component
-   {:component-did-mount
-    ^{:fn-name :did-mount}
-    (fn
-      [_]
-      (let [tool (get-node owner (str (:k opts) "-tooltip"))
-            elem (.getElementById js/document (full-name (:k opts)))
-            rect-tool (.getBoundingClientRect tool)
-            rect (.getBoundingClientRect elem)
-            delta (* 0.5 (- (.-height rect) (.-height rect-tool)))]
-        (set! (.-left (.-style tool)) (str (.-width rect) "px"))
-        (set! (.-top (.-style tool)) (str delta "px"))))
-    :render
-    (fn
-      [_]
-      [:div {:className (styles "popover right" (str "popover-" (:type opts)))
-             :role "alert"
-             :ref (str (:k opts) "-tooltip")}
-       [:div {:className "arrow"} ""]
-       (when (:title app)  [:div {:className "popover-title"} (:title app)])
-       [:div {:className "popover-content"} (:mess app)
-        [:div {:type "button"
-               :className "close"
-               :onClick (:action opts)} "x"]]])}))
+  (let [the-id (str (name (:k opts)) "-tooltip")]
+    (create-component
+     {:component-did-mount
+      (fn
+        [this]
+        (let [tool (.getElementById js/document the-id)
+              elem (.getElementById js/document (full-name (:k opts)))
+              rect-tool (.getBoundingClientRect tool)
+              rect (.getBoundingClientRect elem)
+              delta (* 0.5 (- (.-height rect) (.-height rect-tool)))]
+          (set! (.-left (.-style tool)) (str (+ 5 (.-width rect)) "px"))
+          (set! (.-top (.-style tool)) (str delta "px"))))
+      :render
+      (fn
+        [_]
+        [:div {:className (styles "popover right" (str "popover-" (:type opts)))
+               :role "alert"
+               :id the-id
+               :ref (str (name (:k opts)) "-tooltip")}
+         [:div {:className "arrow"} ""]
+         (when (:title app)  [:div {:className "popover-title"} (:title app)])
+         [:div {:className "popover-content"} (:mess app)
+          [:div {:type "button"
+                 :className "close"
+                 :onClick (:action opts)} "x"]]])})))
 
 
 (defn message
@@ -368,7 +400,10 @@
          [:button {:type "button"
                    :className "close"
                    :data-dismiss "alert"
-                   :onClick #(put! chan [:kill-mess (:k m)])} "x"]
+                   :onClick #(do
+                               (put! chan [:kill-mess (:k m)])
+                               nil
+                               )} "x"]
          mess]))}))
 
 (defn description
@@ -378,11 +413,11 @@
 
 
 (defn button-view
-  [app owner {:keys [k labels comp-name attrs]}]
-  (create-class
+  [app owner {:keys [k labels comp-name attrs] :as opts}]
+  (create-component
    {:render
     (fn [this]
-      (let [state (get-state this)
+      (let [state (get-state owner)
             chan-name (keyword (str (name k) "-chan"))
             chan (get-state owner chan-name)
             button-state (get-in state [:action-state k])
@@ -390,10 +425,12 @@
         [:div
          [:button (merge attrs {:type      "button"
                                 :id        (str (full-name comp-name) "-" (name k))
-                                :disabled  (= "disabled" btn-style)
+                                :disabled  (boolean btn-style)
                                 :className (styles "btn btn-primary has-spinner has-error" btn-style)
-                                :onClick   #(put! chan k)})
-          (label labels k)
+                                :onClick   #(do
+                                              (put! chan k)
+                                              nil)})
+          (label labels k opts)
           [:span {:className "error"}
            [:i {:className "fa fa-ban text-danger"}]]
           [:span {:className "spinner"}
@@ -469,10 +506,10 @@
 
 (defn error-mess
   "Finds the i18n message for the first error on a field."
-  [owner kbs lang]
+  [owner kbs lang opts]
   (let [full-i18n (get-i18n-info owner [:i18n lang])]
-   (when-let [[err-k & errs] (:error kbs)]
-     (i/error full-i18n err-k))))
+    (when-let [[err-k & errs] (:error kbs)]
+      (i/error full-i18n err-k opts))))
 
 (defn validation-style
   [{:keys [valid invalid]}]
@@ -503,14 +540,19 @@
         (magic-input {:chan chan :opts opts}))
       (when (and (i/info opts)
                  (:focus kbs))
-        (build-component tooltip {:mess  (i/info opts)
-                                  :title (i/info-title opts)} {:opts {:k (:k opts) :type "info"}}))
-      (let [mess (error-mess owner kbs lang)]
+        [(build-component tooltip {:mess  (i/info opts)
+                                   :title (i/info-title opts)} owner
+                          {
+                           :opts {:k (:k opts) :type "info"}})])
+      (let [mess (error-mess owner kbs lang opts)]
         (when (and invalid mess)
-          (build-component tooltip {:mess mess} {:opts  {:k      (:k opts)
-                                                         :type   "error"
-                                                         :action #(put! chan [:kill-mess (:k opts)])}
-                                                 :state {:mess mess}})))]]))
+          [(build-component tooltip {:mess mess} owner
+                            {:state  {:mess mess}
+                             :opts  {:k      (:k opts)
+                                     :type   "error"
+                                     :action #(do
+                                                (put! chan [:kill-mess (:k opts)])
+                                                nil)}})]))]]))
 
 (defmethod layout-input "in-line"
   [owner opts kbs {:keys [invalid] :as val-states}]
@@ -523,17 +565,21 @@
         (magic-input {:chan chan :opts opts})
         (when (and (i/info opts)
                    (:focus opts))
-          (build-component tooltip {:mess  (i/info opts)
-                                    :title (i/info-title opts)} {:opts {:k (:k opts) :type "info"}}))]
+          [(build-component tooltip {:mess  (i/info opts)
+                                     :title (i/info-title opts)} owner
+                                     {:state {:mess  (i/info opts)
+                                              :title (i/info-title opts)}
+                                      :opts {:k (:k opts) :type "info"}})])]
        [:div (i/label opts)]]
-      (let [mess (error-mess owner kbs lang)]
+      (let [mess (error-mess owner kbs lang opts)]
         (when (and invalid mess)
-          (build-component
-           tooltip
-           {:mess mess} {:opts  {:k      (:k opts)
-                                 :type   "error"
-                                 :action #(put! chan [:kill-mess (:k opts)])}
-                         :state {:mess mess}})))]
+          [(build-component tooltip {:mess mess} owner
+                            {:state  {:mess mess}
+                             :opts  {:k      (:k opts)
+                                     :type   "error"
+                                     :action #(do
+                                                (put! chan [:kill-mess (:k opts)])
+                                                nil)}})]))]
      (when (i/desc opts) [:p {:className "description"} (i/desc opts)])
      (when (i/html-desc opts) (html (i/html-desc opts)))]))
 
@@ -552,11 +598,18 @@
                  :key         (full-name k)
                  :ref         (full-name k)
                  :value       (:value kbs)
-                 :onBlur      #(do
+                 ;; :onBlur
+                 #_(fn [_]
                                 (put! chan [:focus k])
-                                (put! chan [:validate k]))
-                 :onFocus     #(put! chan [:focus k])
-                 :onChange    #(put! chan [k (e-value %)])
+                                (put! chan [:validate k])
+                                nil)
+                 :onFocus     (fn [_]
+                                 (put! chan [:focus k])
+                                 nil)
+                 :onChange    #(do
+                                 (put! chan [k (e-value %)])
+                                 (put! chan [:validate k])
+                                 nil)
                  :placeholder (get-in opts [:i18n :ph])
                  :disabled    (:disabled  kbs)}
         opts (update-in opts [:attrs] #(merge k-attrs %))]
@@ -572,6 +625,8 @@
 
 (def error-flow
   {:init :in-error
+   :active :in-error
+   :disabled :disabled
    :in-error :in-error})
 
 (s/defn
@@ -603,18 +658,29 @@
          remove-errs-fn (va/build-error-remover verily-rules va/inter-fields-rules)
          typing-controls (build-typing-control schema)
          initial-bs (build-init-state schema (:init opts))
-         initial-action-state {:action :init :clean :disabled}
-         willReceivePropsFn (:IWillReceiveProps opts)]
-     (fn [app owner]
+         initial-action-state {:action :disabled
+                               :clean :disabled}
+         close-channels (fn [this]
+                          (let [{:keys [chan
+                                        action-chan
+                                        created-chan
+                                        clean-chan
+                                        ]} (get-state this)]
+                            (close! chan)
+                            (close! action-chan)
+                            (close! created-chan)
+                            (close! clean-chan)
+                            ))
+         ]
+     (fn [app]
        (create-component
         {:get-initial-state
          (fn [_]
              {:opts opts
-              :chan (chan)
-              :action-chan (chan)
-              :validation-chan (chan)
-              :created-chan (chan)
-              :clean-chan (chan)
+              :chan (chan 10)
+              :action-chan (chan 10)
+              :created-chan (chan 10)
+              :clean-chan (chan 10)
               :action-state initial-action-state
               :inputs initial-bs
               :unit-coercers unit-coercers
@@ -625,75 +691,93 @@
 
          :component-will-mount
          (fn [this]
-           (let [{:keys [chan action-chan validation-chan created-chan clean-chan]} (get-state owner)]
-             (go-loop []
-               (when-not (get-in opts [:action :no-reset])(set-state! owner :inputs initial-bs))
-                 (set-state! owner :action-state initial-action-state )
-                 (loop []
-                   (<! action-chan)
-                   (let [{:keys [inputs] :as state} (get-state owner)
-                         new-bs (va/full-validation inputs state)]
-                     (set-state! owner [:inputs] new-bs)
-                     (if (va/no-error? new-bs)
-                       (put! validation-chan :validee)
-                       (do
-                         (update-state! owner [:action-state :action] error-flow)
-                         (recur)))))
-                 (<! validation-chan)
-                 (let [v (get-state owner :inputs)
-                       raw (va/pre-validation v)
-                       coerced (schema-coercer raw)]
-                   (update-state! owner [:action-state :action] action-states)
-                   (if (get-in opts [:action :async])
-                     (action app owner coerced created-chan)
-                     (try
-                       (action app owner coerced)
-                       (put! created-chan [:ok])
-                       (catch js/Object e
-                         (put! created-chan [:ko e])))))
-                 (let [[v m]  (<! created-chan)]
+           (let [{:keys [chan action-chan created-chan clean-chan]} (get-state this)
+                 do-validation (fn []
+                                 (let [{:keys [inputs] :as state} (get-state this)
+                                       new-bs (va/full-validation inputs state)
+                                       no-error (va/no-error? new-bs)]
+
+                                   (if no-error
+                                     (set-state! this [:action-state :action] nil)
+                                     (set-state! this [:action-state :action] :in-error))
+                                   (set-state! this [:inputs] new-bs)
+                                   no-error))]
+
+             (when-not (get-in opts [:action :no-reset])(set-state! this :inputs initial-bs))
+             (set-state! this :action-state initial-action-state )
+             (do-validation)
+
+             (go
+               (loop []
+                 (when (<! clean-chan)
+                   (clean app this)
+                   (update-state! this [:action-state :action] action-states)
+                   (update-state! this :inputs #(enable-all %))
+                   (recur))))
+
+             (go
+               (loop []
+                 (when-let [[v m]  (<! created-chan)]
                    (if (= :ko v)
                      (do
                        (prn (str "An error has occured during action : " m))
                        (recur))
                      (if (get-in opts [:action :one-shot])
                        (do
-                         (update-state-nr! owner [:action-state :action] action-states)
-                         (update-state-nr! owner [:action-state :clean] action-states)
-                         (update-state! owner :inputs #(disable-all %)))
-                       (recur))))
-                 (<! clean-chan)
-                 (clean app owner)
-                 (update-state-nr! owner [:action-state :action] action-states)
-                 (update-state-nr! owner :inputs #(enable-all %))
-                 (recur))
-               (go
-                 (loop []
-                   (let [[k v] (<! chan)]
-                     (condp = k
-                       :focus (update-state! owner [:inputs v :focus] not)
-                       :kill-mess (update-state! owner [:inputs v] #(dissoc % :error) )
-                       :validate (va/field-validation! owner v)
-                       (let [coerce (get typing-controls k (fn [n _] n))
-                             ptfn (get-in opts [k :post-typing] identity)
-                             v (ptfn v)
-                             old-val (get-state owner [:inputs k :value])
-                             coerced (coerce v old-val)]
-                         (set-state! owner [:inputs k :value] coerced))))
-                   (recur)))))
+                         (update-state! this [:action-state :action] action-states)
+                         (update-state! this [:action-state :clean] action-states)
+                         (update-state! this :inputs #(disable-all %)))
+                       ))
+                   (recur))))
+
+             (go
+               (loop []
+                 (when (<! action-chan)
+                   (let [okay (do-validation)]
+                     (when okay
+                       (set-state! this [:action-state :action] :active)
+                       (let [v (get-state this :inputs)
+                             raw (va/pre-validation v)
+                             coerced (schema-coercer raw)]
+                         (when-let [to-do action]
+                           (if (satisfies? ManyToManyChannel to-do)
+                             (put! to-do [coerced app this])
+
+                             (js/setTimeout
+                              #(to-do coerced app this )
+                              10))
+                           )
+                         (close-channels this)
+                         )
+
+                       )
+                     )
+                   )))
+
+             (go
+               (loop []
+                 (when-let [[k v] (<! chan)]
+                   (condp = k
+                     :focus (update-state! this [:inputs v :focus] not)
+                     :kill-mess (update-state! this [:inputs v] #(dissoc % :error) )
+                     :validate (do
+                                 (do-validation)
+                                 )
+                     (let [coerce (get typing-controls k (fn [n _] n))
+                           ptfn (get-in opts [k :post-typing] identity)
+                           v (ptfn v)
+                           old-val (get-state this [:inputs k :value])
+                           coerced (coerce v old-val)]
+                       (set-state! this [:inputs k :value] coerced)))
+                   (recur))))))
 
          :component-did-mount
-         (fn [_]
-           (handle-date-fields! owner d/default-fmt opts))
+         (fn [this]
+           (handle-date-fields! this d/default-fmt opts))
 
          :component-will-unmount
-         (fn [_]
-           (prn (str "WARNING : "  (full-name comp-name) " will unmount !")))
-
-         :component-will-receive-props
-         (fn [this next-props]
-           (when willReceivePropsFn
-             (willReceivePropsFn owner next-props)))
+         (fn [this]
+           (close-channels this))
 
          :component-will-update
          (fn [this next-props next-state])
@@ -701,7 +785,7 @@
          :render
          (fn [this]
            (let [{:keys [chan inputs action-state dyn-opts] :as state} (get-state this)]
-             (let [labels (comp-i18n owner comp-name schema opts)
+             (let [labels (comp-i18n this comp-name schema opts)
                    title (get-in labels [:title])
                    opts (merge-with merge opts dyn-opts)
                    comp-class (get-in opts [comp-name :className])]
@@ -716,18 +800,23 @@
                         :role "form"}
                  (into [:div {:className "inputs-group"}]
                        (if order
-                         (map (fn [k] (build-input owner (assoc (k opts) :k k :k-sch
+                         (map (fn [k] (build-input this (assoc (k opts) :k k :k-sch
                                                                 (su/get-sch schema k)
                                                                 :i18n (k labels)))) order)
                          (map (fn [[k t]]
                                 (let [k (if (keyword? k) k (:k k))]
-                                  (build-input owner (assoc (k opts) :k k :k-sch t :i18n (k labels))))) schema)))
+                                  (build-input this (assoc (k opts) :k k :k-sch t :i18n (k labels))))) schema)))
                  [:div {:className "panel-button"}
-                  (build-component button-view app {:state state :opts {:k :action
-                                                                        :labels (:action labels)
-                                                                        :comp-name comp-name
-                                                                        :attrs (get-in opts [:action :attrs])}})
-                  (build-component button-view app {:state state :opts {:k :clean
-                                                                        :labels (:clean labels)
-                                                                        :comp-name comp-name
-                                                                        :attrs (get-in opts [:clean :attrs])}})]]])))})))))
+                  [(build-component button-view state this {:state state
+                                                            :opts {:k :action
+                                                                   :labels (or
+                                                                            (:action labels)
+                                                                            "Submit")
+                                                                   :comp-name comp-name
+                                                                   :attrs (get-in opts
+                                                                                  [:action :attrs])}})]
+                  #_[(build-component button-view state this {:state state
+                                                            :opts {:k :clean
+                                                                 :labels (or (:clean labels) "Clear")
+                                                                 :comp-name comp-name
+                                                                 :attrs (get-in opts [:clean :attrs])}})]]]])))})))))

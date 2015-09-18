@@ -4,3 +4,4 @@ examples/contact/node_modules/
 examples/contact/out/
 *.log
 *~
+pom.xml

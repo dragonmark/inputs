@@ -1,7 +1,7 @@
-(ns om-inputs.validation
+(ns dragonmark.inputs.validation
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require
-   [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+   [dragonmark.inputs.extern :refer [get-state set-state! update-state!
                              get-node create-component get-i18n-info
                              build-component]]
    [clojure.set :as st]
@@ -9,11 +9,10 @@
    [jkkramer.verily :as v :refer [validation->fn]]
    [schema.core :as s :include-macros true]
    [schema.coerce :as coerce]
-   [om-inputs.schemas :as su :refer [ sch-field sch-business-state sch-field-state]]
-   [om-inputs.date-utils :as d]))
+   [dragonmark.inputs.schemas :as su :refer [ sch-field sch-business-state sch-field-state]]
+   [dragonmark.inputs.date-utils :as d]))
 
 
-#_(defmulti valider (fn [vspec] (first vspec)))
 
 
 
@@ -30,7 +29,7 @@
   [(s/named s/Keyword "message")])
 
 (def sch-errors
-  "Describes the om-input's error data structure.
+  "Describes the input's error data structure.
    A field can have multiples errors."
   {sch-field sch-errors-list})
 
@@ -321,7 +320,8 @@
   (let [{:keys [unit-validators]} state
         unit (bs->unit-map inputs fk)]
     (if (validate? (fk inputs))
-      (if-let [errs (or ((fk unit-validators) unit)
+      (if-let [errs (or (and fk (if-let [the-fn (fk unit-validators)]
+                                  (the-fn unit)))
                         (verily-validation fk unit inputs state))]
         (add-field-error inputs errs)
         (remove-field-error inputs fk))
@@ -333,7 +333,7 @@
    (let [{:keys [inputs] :as state} (get-state owner)]
     (let [new-business-state (field-validation f inputs state)]
       (when (not= inputs new-business-state)
-       (set-state! owner [:inputs] new-business-state))))))
+        (set-state! owner [:inputs] new-business-state))))))
 
 
 (defn full-validation
@@ -346,76 +346,3 @@
   [bs :- sch-business-state]
   (not-any? (fn [[k v]]
               (false? (:valid v))) bs))
-
-
-
-
-#_(
-
-     ;; Processus de validation
-     ;; Faut il identifier les validation inter champs afin de les jouer au bon moment ?
-     ;; Une piste : Les erreurs verily nous indique si la validation est inter champs
-     ;; The source schema
-    (def dummy-sch {:email s/Str
-                    :confirm-email s/Str
-                    (s/optional-key :size) s/Num
-                    (s/optional-key :company) s/Str})
-
-   ;; The units schemas
-
-   (sch-glo->unit dummy-sch)
-
-
-   ;; business-state input
-
-   (def bs {:email {:value "email"
-                    :required true
-                    :type s/Str}
-            :confirm-email {:value "titi"
-                            :type s/Str
-                            :required true}
-            :size {:value "7"
-                   :required false
-                   :type s/Int}
-            :company {:value ""
-                      :required false
-                      :type s/Str}})
-
-   ;; pre-validation keep required fields or non required with value.
-
-   (pre-validation bs)
-
-   (def pvbs {:email "email"
-              :confirm-email "titi"
-              :size "7"})
-
-   ;; Coercion
-   (def sch-coercer (coerce/coercer dummy-sch validation-coercer))
-
-   (def pvcbs (sch-coercer pvbs))
-
-    (assert (= pvcbs {:email "email"
-               :confirm-email "titi"
-               :size 7}))
-
-   ;;Validation ->
-   (def rules [[:min-val 10 :size :size-min-length]
-               [:email [:email :confirm-email] :bad-email]
-               [:equal [:email :confirm-email] :email-match]])
-
-   (def validator (build-verily-validator rules))
-
-   (validator pvcbs)
-
-   (validator {:email "kjk"})
-
-   (filter #(vector? (:keys %)  ) ((v/validations->fn rules) pvcbs))
-
-
-   (unit-verily-validation :size {:size 56} {:unit-coercers (build-unit-coercers  dummy-sch)
-                                              :verily-validator validator
-                                              :remove-errs-fn (build-error-remover rules)})
-
-
-
- )

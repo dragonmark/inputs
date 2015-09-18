@@ -1,4 +1,4 @@
-(ns om-inputs.schema-utils
+(ns dragonmark.inputs.schema-utils
   (:require  [schema.core :as s :include-macros true]
              [schema.coerce :as coerce]))
 
@@ -34,4 +34,3 @@
     schema.core.EqSchema (type (:v t))
     js/Function t
     "other"))
-

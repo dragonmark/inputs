@@ -1,11 +1,11 @@
-(ns om-inputs.i18n
+(ns dragonmark.inputs.i18n
   "Handle all the aspectd related to the i18n of the components."
   (:require  [schema.core :as s :include-macros true]
              [clojure.string :as str]
-             [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
+             [dragonmark.inputs.extern :refer [get-state set-state! update-state!
                                        get-node create-component get-i18n-info
                                        build-component]]
-             [om-inputs.utils :refer [full-name]]))
+             [dragonmark.inputs.utils :refer [full-name]]))
 
 ;_________________________________________________
 ;                                                 |
@@ -104,9 +104,13 @@
 
 (defn label
   ([opts]
-   (label (:i18n opts) (:k opts)))
-  ([i18n k]
-   (get-in i18n [:label] (str/capitalize (name k)))))
+   (label (:i18n opts) (:k opts) opts))
+  ([i18n k opts]
+   (or
+    (get-in i18n [:label])
+    (:label opts)
+    (str/capitalize (name k))
+    )))
 
 (defn desc
   ([opts]
@@ -135,14 +139,30 @@
 (defn enum-label [data code]
   (get-in data [code :label] (if (keyword? code) (full-name code) code)))
 
+#_(defn label
+    ([opts]
+     (or
+      (get-in opts [:i18n :info])
+      (:label opts)
+      (str/capitalize (name k))
+      )
+     (label (:i18n opts) (:k opts) opts))
+    ([i18n k opts]
+     ))
+
 (s/defn error
   [full-i18n :- I18NSchema
-   k :- s/Keyword]
-  (get-in full-i18n [:errors k]))
+   k :- s/Keyword
+   & [opts]]
+  (or
+   (get-in full-i18n [:errors k])
+   (get-in opts [k :label])
+   (name k)))
 
 (defn ph
   [i18n]
   (get-in i18n [:ph]))
+
 
 (defn info
   [opts]

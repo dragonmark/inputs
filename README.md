@@ -1,4 +1,6 @@
-# A ClojureScript library that generates Om/React forms
+# A ClojureScript library that generates Reagent/React forms
+
+Based on [Om Input](https://github.com/hiram-madelaine/om-inputs)
 
 > You just go down the list of all the most important things on the internet and what you find is :    
 > a Form is usually the broker for the stuff that matters  
@@ -11,23 +13,11 @@
 * Generate forms with specification using [Prismatic/Schema](https://github.com/Prismatic/schema).
 * Provide best practice UX
 * Use no external JS Framework dependencies beside React.js
-
+* Unified client/server validation
 
 ## Artifacts
 
-[![Clojars Project](http://clojars.org/om-inputs/latest-version.svg)](http://clojars.org/om-inputs)
-
-## Project Maturity
-
-om-inputs is used for real production projects that are used every day.
-It has been tested by QA Team.
-At this stage, the project will minimize the breaking changes as it could impact production code.
-
-
-## Show me what looks like !
-
-[You can try it online with the interactive tutorial](http://hiram-madelaine.github.io/om-inputs/playground)
-
+[![Clojars Project](http://clojars.org/dragonmark/inputs/latest-version.svg)](http://clojars.org/dragonmark/inputs)
 
 ## How does it work
 
@@ -71,55 +61,29 @@ Using Schema allows the :
 A value can be nil using s/maybe :
 
 ```
-{:person/first-name (s/maybe s/Str)}
+{:person-first-name (s/maybe s/Str)}
 
 ```
 
 
 A key can be optional using s/s/optional-key :
 ```
- {(s/optional-key :person/size) s/Num}
+ {(s/optional-key :person-size) s/Num}
 ```
 
 ##### Example
 
 ```
-(def sch-person {:person/first-name s/Str
-                 :person/name s/Str
-                 (s/optional-key :person/birthdate) s/Inst
-                 (s/optional-key :person/size) s/Int
-                 (s/optional-key :person/gender) (s/enum "M" "Ms")})
+(def sch-person {:person-first-name s/Str
+                 :person-name s/Str
+                 (s/optional-key :person-birthdate) s/Inst
+                 (s/optional-key :person-size) s/Int
+                 (s/optional-key :person-gender) (s/enum "M" "F")})
 ```
 
-#### The callback function
+### Build a Reagent input component
 
-The callback function takes the cursor app state, the owner and the entity.
-
-`(fn [app owner entity])`
-
-##### Callback options
-
-```
-{(s/optional-key :action) {(s/optional-key :one-shot) s/Bool
-                             (s/optional-key :no-reset) s/Bool
-                             (s/optional-key :async) s/Bool
-                             (s/optional-key :attrs) {s/Any s/Any}}}
-```
-
-##### Asynchronous action
-
-`{:action {:async true}}`
-
-An action can also be asynchronous. In this case the callback fn must have 4 args :
-`(fn [app owner entity chan])`
-The fourth argument is a core.async channel in wich the fn puts the succes or failure of the operation.
-* :ok for success ;
-* :ko in case of failure.
-
-
-### Build an Om input component
-
-To build an Om input component, just call the function `make-input-comp` with the required parameters :
+To build an input component, just call the function `make-input-comp` with the required parameters :
 - A keyword for the component name
 - A Prismatic/Schema
 - a callback function
@@ -127,7 +91,7 @@ To build an Om input component, just call the function `make-input-comp` with th
 In this example we build the component :create-person with the Schema seen previously and the callback simply diplay the created map :
 
 ```
-(def person-input-view (make-input-comp :create-person sch-person #(js/alert %3)))
+(def person-input-view (make-input-comp :create-person sch-person #(js/alert %)))
 ```
 
 
@@ -141,11 +105,11 @@ Each entry of a schema generate a field in the form.
 
 Hence, the example schema will produce a form with these input fields :
 
-* A mandatory input of type text for :person/first-name ;
-* A mandatory input of type text for :person/name ;
-* An optional date input for the :person/birthdate ;
-* An optional input that allows only Integer for :person/size ;
-* An optional select that that present the choices "M" and "Ms" ;
+* A mandatory input of type text for :person-first-name ;
+* A mandatory input of type text for :person-name ;
+* An optional date input for the :person-birthdate ;
+* An optional input that allows only Integer for :person-size ;
+* An optional select that that present the choices "M" and "F" ;
 * A validation button that trigger the callback.
 
 #### Fields validation
@@ -177,18 +141,6 @@ The problem with an HTMl form is that all data are strings.
 
 ##### When validations occur ?
 
-###### Inline validation
-
-Each field is validated when leaving the input.
-
-If the field is required and left empty the field is maked invalid and a tooltip is displayed.
-
-
-
-
-###### Submission validation
-
-When clicking the action button, the form is validated according to the Schema :
 
 * A required input must have a non blank value ;
 * A coercion appends if needed for type different than s/Str
@@ -209,7 +161,7 @@ The schema is a map that can't be ordered so the fields are displayed in a rando
 You can define the total ordering by giving a vector :
 
 ```
-(def opts {:order [:person/first-name :person/name :person/gender :person/birthdate :person/size :person/married]})
+(def opts {:order [:person-first-name :person-name :person-gender :person-birthdate :person-size :person-married]})
 
 ```
 
@@ -223,19 +175,19 @@ By default the enum is display as a dropdown list
 It is possible to choose different representations :
 Vertical Group of radio buttons :
 ```
-(def opts {:person/gender {:type "radio-group"}})
+(def opts {:person-gender {:type "radio-group"}})
 
 ```
 Horizontal group of radio buttons :
 
 ```
-(def opts {:person/gender {:type "radio-group-inline"}})
+(def opts {:person-gender {:type "radio-group-inline"}})
 
 ```
 
 Segmented controls :
 ```
-(def opts {:person/gender {:type "btn-group"}})
+(def opts {:person-gender {:type "btn-group"}})
 
 ```
 
@@ -257,15 +209,12 @@ I chose [Verily](https://github.com/jkk/verily) for the following reasons :
 * It works for Clojure and ClojureScript.
 
 
-My goal is to be able to plug any other validation framework.
-
-
 ######  Add validations rules
 
 
 ```
-(def opts {:validations [[:min-val 100 :person/size :person-size-min-length]
-                         [:email :person/email :bad-email]]})
+(def opts {:validations [[:min-val 100 :person-size :person-size-min-length]
+                         [:email :person-email :bad-email]]})
 ```
 
 
@@ -275,52 +224,17 @@ My goal is to be able to plug any other validation framework.
 It should be possible to have initial values for each field.
 
 ```
-(def opts {:init {:person/married true}})
+(def opts {:init {:person-married true}})
 
 ```
 
 The initial data could be retrieved from the cursor app-state.
 
 
-#### i18n
-
-It is possible to provide the labels and error messages in multiple languages.
-Just put a map in the shared data :
-
-```
-(om/root
- app-view
- app-state
- {:target (. js/document (getElementById "person"))
-  :shared {:i18n {"en" {:language {:action "Change language"
-                                   :lang {:label "Language"
-                                          :data {"en" "English"
-                                                 "fr" "French"}}}
-                        :create-person {:action "Create person"
-                                        :person/name {:label "Name"}
-                                        :person/birthdate {:label "Birthday"}
-                                        :person/first-name {:label "Firstname"}
-                                        :person/size {:label "Size"}
-                                        :person/gender {:label "Gender"
-                                                        :data {"M" "Mister"
-                                                               "Ms" "Miss"}}}}
-                  "fr" {:language {:action "Choix de la langue"
-                                   :lang {:label "Langue"
-                                          :data {"en" "Anglais"
-                                                 "fr" "Français"}}}
-                        :create-person {:action "Créer personne"
-                                       :person/name {:label "Nom"}
-                                       :person/first-name {:label "Prénom"}
-                                       :person/birthdate {:label "Date de naissance"}
-                                       :person/size {:label "Taille"}
-                                       :person/gender {:label "Genre"
-                                                       :data {"M" "Monsieur"
-                                                              "Ms" "Madame"}}}}}}})
-
-```
 
 ## Copyright and license
 
-Copyright © 2013-2015 Hiram Madelaine
+Copyright © 2013-2015 Hiram Madelaine and David Pollak
+
 
 Licensed under the EPL (see the file LICENSE.md).

@@ -1,9 +1,9 @@
-(ns om-inputs.utils
+(ns dragonmark.inputs.utils
   (:require
    [clojure.string :as str]
-   [om-inputs.extern :refer [get-state set-state! update-state! update-state-nr!
-                             get-node create-component get-i18n-info
-                             build-component]]
+   [dragonmark.inputs.extern :refer [get-state set-state! update-state!
+                                     get-node create-component get-i18n-info
+                                     build-component]]
             ))
 
 
@@ -46,7 +46,7 @@
   (let [args [owner [:dyn-opts cpt :className] style]]
     (if render?
       (apply set-state! args)
-      (apply set-state-nr! args))))
+      (apply set-state! args))))
 
 (def set-comp-class!
   (partial set-comp-class!* true))
