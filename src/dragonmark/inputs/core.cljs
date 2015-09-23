@@ -649,6 +649,7 @@
     clean
     opts :- SchOptions]
    (let [order (:order opts)
+         ext-chan (:ext-chan opts)
          verily-rules (:validations opts)
          schema-coercer (coerce/coercer schema va/validation-coercer)
          validation (va/build-verily-validator verily-rules)
@@ -691,6 +692,8 @@
 
          :component-will-mount
          (fn [this]
+           (when ext-chan (put! ext-chan {:action :component-will-mount :component this}))
+           (when-let [f (:component-will-mount-fn opts)] (f this))
            (let [{:keys [chan action-chan created-chan clean-chan]} (get-state this)
                  do-validation (fn []
                                  (let [{:keys [inputs] :as state} (get-state this)
@@ -747,12 +750,8 @@
                               #(to-do coerced app this )
                               10))
                            )
-                         (close-channels this)
-                         )
-
-                       )
-                     )
-                   )))
+                         ;; (close-channels this)
+                         ))))))
 
              (go
                (loop []
@@ -760,9 +759,8 @@
                    (condp = k
                      :focus (update-state! this [:inputs v :focus] not)
                      :kill-mess (update-state! this [:inputs v] #(dissoc % :error) )
-                     :validate (do
-                                 (do-validation)
-                                 )
+                     :validate (do-validation)
+
                      (let [coerce (get typing-controls k (fn [n _] n))
                            ptfn (get-in opts [k :post-typing] identity)
                            v (ptfn v)
@@ -773,17 +771,29 @@
 
          :component-did-mount
          (fn [this]
+           (when ext-chan (put! ext-chan {:action :component-did-mount :component this}))
+           (when-let [f (:component-did-mount-fn opts)] (f this))
            (handle-date-fields! this d/default-fmt opts))
 
          :component-will-unmount
          (fn [this]
+           (when ext-chan (put! ext-chan {:action :component-will-unmount :component this}))
+           (when-let [f (:component-will-unmount-fn opts)] (f this))
            (close-channels this))
 
          :component-will-update
-         (fn [this next-props next-state])
+         (fn [this next-props next-state]
+           (when ext-chan (put! ext-chan {:action :component-will-update
+                                          :component this
+                                          :next-props next-props
+                                          :next-state next-state}))
+           (when-let [f (:component-will-update-fn opts)] (f this next-props next-state)))
 
          :render
          (fn [this]
+           (when ext-chan (put! ext-chan {:action :render
+                                          :component this}))
+           (when-let [f (:render-fn opts)] (f this))
            (let [{:keys [chan inputs action-state dyn-opts] :as state} (get-state this)]
              (let [labels (comp-i18n this comp-name schema opts)
                    title (get-in labels [:title])
