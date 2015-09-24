@@ -10,9 +10,10 @@
    [goog.net.XhrIo :as xhr]
    [cljs.reader :as reader]
    [goog.events :as events]
+
    [figwheel.client :as fw :include-macros true]
    [dragonmark.inputs.validation :as va]
-   [dragonmark.inputs.extern :refer [get-i18n-info get-state build-component]]
+   [dragonmark.inputs.extern :refer [get-i18n-info get-state build-component get-state]]
 
    )
   (:import
@@ -33,6 +34,7 @@
 (defn display-edn [edn]
   (js/alert edn))
 
+(def mounted (atom nil))
 
 (def input-view (make-input-comp
                   :create-person
@@ -52,6 +54,9 @@
                   display-edn
                   {:create-person        {:className "visible"}
                    :validate-i18n-keys   false
+
+                   :mount-info-atom mounted
+
                    :init                 {
                                           :person_gender "F"
                                           :person_size          187.50
@@ -96,8 +101,8 @@
                                           :attrs   {:min "0" :max "10" :step 2 :size "lg"}}
                    :person_married       {:layout "in-line"
                                           :label "Married"}
-                   :validations          [
-                                          [:positive [:person_age] :positive]
+                   :validations          [[:positive [:person_age] :positive]
+                                          ;; [:can_drink [:person_age] "No under age drinking"]
                                           [:after (at 0) :person_date_aller :date_aller]
                                           [:min-length 16 :person_password]
                                           [:email [:person_email_confirm :person_email] :bad_email]
@@ -107,6 +112,15 @@
   []
   [:div {:className "container"}
    [:div "Some excellent input stuff"]
+   [:div [:button
+          {:onClick (fn []
+                      (some-> mounted deref :chan
+                              (put!
+                                [:update-input [[:add-error :person_name "Yak Yak3" ]]])
+                              )
+                      nil
+                      )}
+          "Insert async stuff"]]
    [(build-component input-view (:client app) nil {:opts {:action
                                                           (fn [a b c d]
                                                             (.log js/console "Data " (pr-str d))

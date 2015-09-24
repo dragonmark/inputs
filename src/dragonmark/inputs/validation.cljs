@@ -254,11 +254,26 @@
                 (assoc-in [e :valid] false)
                 (assoc-in [e :error] (e errs)))) state (keys errs)))
 
+(defn no-async-error?
+  [state k]
+  (let [se (-> state k :async-error)]
+    (boolean
+      (or (nil? se)
+          (empty? se)))))
+
 (s/defn remove-field-error :- sch-business-state
   [state :- sch-business-state
    k :- s/Keyword]
   (-> state
+      (assoc-in [k :valid] (no-async-error? state k))
+      (update-in [k] dissoc :error)))
+
+(s/defn remove-field-error-and-server :- sch-business-state
+  [state :- sch-business-state
+   k :- s/Keyword]
+  (-> state
       (assoc-in [k :valid] true)
+      (update-in [k] dissoc :async-error)
       (update-in [k] dissoc :error)))
 
 
@@ -330,10 +345,14 @@
 (defn field-validation!
   "Validate a single field of the local business state and update the local state."
   ([owner f]
-   (let [{:keys [inputs] :as state} (get-state owner)]
-    (let [new-business-state (field-validation f inputs state)]
-      (when (not= inputs new-business-state)
-        (set-state! owner [:inputs] new-business-state))))))
+   (.log js/console "fv!" (pr-str f))
+   (let [{:keys [inputs] :as state} (get-state owner)
+         old-inputs inputs
+         inputs (remove-field-error-and-server inputs f)]
+     (.log js/console "After " (inputs f))
+     (let [new-business-state (field-validation f inputs state)]
+       (when (not= old-inputs new-business-state)
+         (set-state! owner [:inputs] new-business-state))))))
 
 
 (defn full-validation

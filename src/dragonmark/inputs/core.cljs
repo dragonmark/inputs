@@ -22,9 +22,33 @@
 
 (enable-console-print!)
 
+(def ^:dynamic *component* nil)
 
-#_(s/set-compile-fn-validation! false)                      ;Problem with Schema 0.3.3
+(defn cc
+  ([] nil)
+  ([a] a)
+  ([a b] (cond
+           (and (nil? a) (nil? b))
+           nil
 
+           (nil? a)
+           (if (sequential? b) b [b])
+
+           (nil? b)
+           (if (sequential? a) a [a])
+
+           (and (sequential? a)
+                (sequential? b))
+           (concat a b)
+
+           (sequential? a) (concat a [b])
+
+           (sequential? b) (concat [a] b)
+
+           :else [a b]
+           ))
+  ([a b & rst] (apply cc (cc a b) rst))
+  )
 
 ;_________________________________________________
 ;                                                 |
@@ -178,12 +202,6 @@
                              nil)} "+"]]))
 
 
-#_(defmethod magic-input s/Inst
-  [{{:keys [attrs]} :opts}]
-  (let [v (:value attrs)
-        date-in (d/display-date v)]
-    [:input (merge attrs {:value date-in})]))
-
 (defmethod magic-input s/Inst
   [{{:keys [k attrs]} :opts chan :chan}]
   (let [date (:value attrs)]
@@ -226,11 +244,6 @@
                                        (put! chan [:validate k])
                                        nil)
                           :type     "checkbox"})]))
-
-
-#_(defmethod magic-input integer?
- [{:keys [k attrs data]}]
- [:input (merge {:type "number"} attrs)])
 
 
 (defmethod magic-input "range"
@@ -504,11 +517,13 @@
 ;                 React Form Component Builders             |
 ;___________________________________________________________|
 
+
+
 (defn error-mess
   "Finds the i18n message for the first error on a field."
   [owner kbs lang opts]
   (let [full-i18n (get-i18n-info owner [:i18n lang])]
-    (when-let [[err-k & errs] (:error kbs)]
+    (when-let [[err-k & errs] (cc (:error kbs) (:async-error kbs))]
       (i/error full-i18n err-k opts))))
 
 (defn validation-style
@@ -598,8 +613,7 @@
                  :key         (full-name k)
                  :ref         (full-name k)
                  :value       (:value kbs)
-                 ;; :onBlur
-                 #_(fn [_]
+                 :onBlur      (fn [_]
                                 (put! chan [:focus k])
                                 (put! chan [:validate k])
                                 nil)
@@ -629,6 +643,44 @@
    :disabled :disabled
    :in-error :in-error})
 
+(defn run-exec
+  [m cmds]
+
+  (reduce (fn [m [cmd & rst]]
+            (case cmd
+              :remove-error
+              (let [fld (first rst)
+                    cv (dissoc (fld m) :async-error)
+                    cv (update cv :valid #(let [e (:error %)]
+                                           (not
+                                             (boolean
+                                               (or (nil? e)
+                                                   (empty? e))))))
+                    ]
+                (assoc m (first rst) cv))
+
+              :add-error
+              (let [[fld errs] rst]
+                (update m fld #(-> %
+                                   (assoc :valid false)
+                                   (update :async-error cc errs))))
+
+              :assoc
+              (assoc m (first rst) (second rst))
+
+              :dissoc
+              (dissoc m (first rst))
+
+              :assoc-in
+              (assoc-in m (first rst) (second rst))
+
+              :dissoc-in
+              (let [f (first rst)
+                    v (-> f butlast vec)
+                    i (last f)]
+                (update-in m v dissoc i))))
+          m cmds))
+
 (s/defn
   make-input-comp
   "Build an input form Om component based on a prismatic/Schema"
@@ -651,6 +703,7 @@
    (let [order (:order opts)
          ext-chan (:ext-chan opts)
          verily-rules (:validations opts)
+         mount-info-atom (:mount-info-atom opts)
          schema-coercer (coerce/coercer schema va/validation-coercer)
          validation (va/build-verily-validator verily-rules)
          checker (partial va/validate schema-coercer va/transform-schema-errors)
@@ -675,158 +728,170 @@
          ]
      (fn [app]
        (create-component
-        {:get-initial-state
-         (fn [_]
-             {:opts opts
-              :chan (chan 10)
-              :action-chan (chan 10)
-              :created-chan (chan 10)
-              :clean-chan (chan 10)
-              :action-state initial-action-state
-              :inputs initial-bs
-              :unit-coercers unit-coercers
-              :unit-validators unit-validators
-              :verily-validator validation
-              :remove-errs-fn remove-errs-fn
-              :validation-deps (va/fields-dependencies verily-rules)})
+         {:get-initial-state
+          (fn [_]
+            {:opts             opts
+             :chan             (chan 10)
+             :action-chan      (chan 10)
+             :created-chan     (chan 10)
+             :clean-chan       (chan 10)
+             :action-state     initial-action-state
+             :inputs           initial-bs
+             :unit-coercers    unit-coercers
+             :unit-validators  unit-validators
+             :verily-validator validation
+             :remove-errs-fn   remove-errs-fn
+             :validation-deps  (va/fields-dependencies verily-rules)})
 
-         :component-will-mount
-         (fn [this]
-           (when ext-chan (put! ext-chan {:action :component-will-mount :component this}))
-           (when-let [f (:component-will-mount-fn opts)] (f this))
-           (let [{:keys [chan action-chan created-chan clean-chan]} (get-state this)
-                 do-validation (fn []
-                                 (let [{:keys [inputs] :as state} (get-state this)
-                                       new-bs (va/full-validation inputs state)
-                                       no-error (va/no-error? new-bs)]
+          :component-will-mount
+          (fn [this]
+            (binding [*component* this]
+              (when ext-chan (put! ext-chan {:action :component-will-mount :component this}))
+              (when-let [f (:component-will-mount-fn opts)] (f this))
+              (let [{:keys [chan action-chan created-chan clean-chan]} (get-state this)
 
-                                   (if no-error
-                                     (set-state! this [:action-state :action] nil)
-                                     (set-state! this [:action-state :action] :in-error))
-                                   (set-state! this [:inputs] new-bs)
-                                   no-error))]
+                    do-validation (fn []
+                                    (let [{:keys [inputs] :as state} (get-state this)
+                                          new-bs (va/full-validation inputs state)
+                                          no-error (va/no-error? new-bs)]
 
-             (when-not (get-in opts [:action :no-reset])(set-state! this :inputs initial-bs))
-             (set-state! this :action-state initial-action-state )
-             (do-validation)
+                                      (if no-error
+                                        (set-state! this [:action-state :action] nil)
+                                        (set-state! this [:action-state :action] :in-error))
+                                      (set-state! this [:inputs] new-bs)
+                                      no-error))]
+                (when mount-info-atom (reset! mount-info-atom {:component this :chan chan}))
+                (when-not (get-in opts [:action :no-reset]) (set-state! this :inputs initial-bs))
+                (set-state! this :action-state initial-action-state)
+                (do-validation)
 
-             (go
-               (loop []
-                 (when (<! clean-chan)
-                   (clean app this)
-                   (update-state! this [:action-state :action] action-states)
-                   (update-state! this :inputs #(enable-all %))
-                   (recur))))
+                (go
+                  (loop []
+                    (when (<! clean-chan)
+                      (clean app this)
+                      (update-state! this [:action-state :action] action-states)
+                      (update-state! this :inputs #(enable-all %))
+                      (recur))))
 
-             (go
-               (loop []
-                 (when-let [[v m]  (<! created-chan)]
-                   (if (= :ko v)
-                     (do
-                       (prn (str "An error has occured during action : " m))
-                       (recur))
-                     (if (get-in opts [:action :one-shot])
-                       (do
-                         (update-state! this [:action-state :action] action-states)
-                         (update-state! this [:action-state :clean] action-states)
-                         (update-state! this :inputs #(disable-all %)))
-                       ))
-                   (recur))))
+                (go
+                  (loop []
+                    (when-let [[v m] (<! created-chan)]
+                      (if (= :ko v)
+                        (do
+                          (prn (str "An error has occured during action : " m))
+                          (recur))
+                        (if (get-in opts [:action :one-shot])
+                          (do
+                            (update-state! this [:action-state :action] action-states)
+                            (update-state! this [:action-state :clean] action-states)
+                            (update-state! this :inputs #(disable-all %)))
+                          ))
+                      (recur))))
 
-             (go
-               (loop []
-                 (when (<! action-chan)
-                   (let [okay (do-validation)]
-                     (when okay
-                       (set-state! this [:action-state :action] :active)
-                       (let [v (get-state this :inputs)
-                             raw (va/pre-validation v)
-                             coerced (schema-coercer raw)]
-                         (when-let [to-do action]
-                           (if (satisfies? ManyToManyChannel to-do)
-                             (put! to-do [coerced app this])
+                (go
+                  (loop []
+                    (when (<! action-chan)
+                      (let [okay (do-validation)]
+                        (when okay
+                          (set-state! this [:action-state :action] :active)
+                          (let [v (get-state this :inputs)
+                                raw (va/pre-validation v)
+                                coerced (schema-coercer raw)]
+                            (when-let [to-do action]
+                              (if (satisfies? ManyToManyChannel to-do)
+                                (put! to-do [coerced app this])
 
-                             (js/setTimeout
-                              #(to-do coerced app this )
-                              10))
-                           )
-                         ;; (close-channels this)
-                         ))))))
+                                (js/setTimeout
+                                  #(to-do coerced app this)
+                                  10))
+                              )
+                            ;; (close-channels this)
+                            ))))))
 
-             (go
-               (loop []
-                 (when-let [[k v] (<! chan)]
-                   (condp = k
-                     :focus (update-state! this [:inputs v :focus] not)
-                     :kill-mess (update-state! this [:inputs v] #(dissoc % :error) )
-                     :validate (do-validation)
+                (go
+                  (loop []
+                    (when-let [[k v] (<! chan)]
+                      (binding [*component* this]
+                        (condp = k
+                          :focus (update-state! this [:inputs v :focus] not)
+                          :kill-mess (update-state! this [:inputs v] #(dissoc % :error))
+                          :validate (do
+                                      (va/field-validation! this v)
+                                      (do-validation))
 
-                     (let [coerce (get typing-controls k (fn [n _] n))
-                           ptfn (get-in opts [k :post-typing] identity)
-                           v (ptfn v)
-                           old-val (get-state this [:inputs k :value])
-                           coerced (coerce v old-val)]
-                       (set-state! this [:inputs k :value] coerced)))
-                   (recur))))))
+                          :update-input
+                          (set-state! this :inputs (-> this (get-state :inputs) (run-exec v)))
 
-         :component-did-mount
-         (fn [this]
-           (when ext-chan (put! ext-chan {:action :component-did-mount :component this}))
-           (when-let [f (:component-did-mount-fn opts)] (f this))
-           (handle-date-fields! this d/default-fmt opts))
+                          (let [coerce (get typing-controls k (fn [n _] n))
+                                ptfn (get-in opts [k :post-typing] identity)
+                                v (ptfn v)
+                                old-val (get-state this [:inputs k :value])
+                                coerced (coerce v old-val)]
+                            (set-state! this [:inputs k :value] coerced))))
+                      (recur)))))))
 
-         :component-will-unmount
-         (fn [this]
-           (when ext-chan (put! ext-chan {:action :component-will-unmount :component this}))
-           (when-let [f (:component-will-unmount-fn opts)] (f this))
-           (close-channels this))
+          :component-did-mount
+          (fn [this]
+            (binding [*component* this]
+              (when ext-chan (put! ext-chan {:action :component-did-mount :component this}))
+              (when-let [f (:component-did-mount-fn opts)] (f this))
+              (handle-date-fields! this d/default-fmt opts)))
 
-         :component-will-update
-         (fn [this next-props next-state]
-           (when ext-chan (put! ext-chan {:action :component-will-update
-                                          :component this
-                                          :next-props next-props
-                                          :next-state next-state}))
-           (when-let [f (:component-will-update-fn opts)] (f this next-props next-state)))
+          :component-will-unmount
+          (fn [this]
+            (binding [*component* this]
+              (when ext-chan (put! ext-chan {:action :component-will-unmount :component this}))
+              (when-let [f (:component-will-unmount-fn opts)] (f this))
+              (close-channels this)))
 
-         :render
-         (fn [this]
-           (when ext-chan (put! ext-chan {:action :render
-                                          :component this}))
-           (when-let [f (:render-fn opts)] (f this))
-           (let [{:keys [chan inputs action-state dyn-opts] :as state} (get-state this)]
-             (let [labels (comp-i18n this comp-name schema opts)
-                   title (get-in labels [:title])
-                   opts (merge-with merge opts dyn-opts)
-                   comp-class (get-in opts [comp-name :className])]
-               [:div {:className (styles "panel panel-default" comp-class)
-                             :key (full-name comp-name)
-                             :ref (full-name comp-name)
-                             :id (full-name comp-name)}
-                         (when title
-                           [:div {:className "panel-heading"}
-                            [:h3 {:className "panel-title"} title]])
-                [:form {:className "panel-body"
-                        :role "form"}
-                 (into [:div {:className "inputs-group"}]
-                       (if order
-                         (map (fn [k] (build-input this (assoc (k opts) :k k :k-sch
-                                                                (su/get-sch schema k)
-                                                                :i18n (k labels)))) order)
-                         (map (fn [[k t]]
-                                (let [k (if (keyword? k) k (:k k))]
-                                  (build-input this (assoc (k opts) :k k :k-sch t :i18n (k labels))))) schema)))
-                 [:div {:className "panel-button"}
-                  [(build-component button-view state this {:state state
-                                                            :opts {:k :action
-                                                                   :labels (or
-                                                                            (:action labels)
-                                                                            "Submit")
-                                                                   :comp-name comp-name
-                                                                   :attrs (get-in opts
-                                                                                  [:action :attrs])}})]
-                  #_[(build-component button-view state this {:state state
-                                                            :opts {:k :clean
-                                                                 :labels (or (:clean labels) "Clear")
-                                                                 :comp-name comp-name
-                                                                 :attrs (get-in opts [:clean :attrs])}})]]]])))})))))
+          :component-will-update
+          (fn [this next-props next-state]
+            (binding [*component* this]
+              (when ext-chan (put! ext-chan {:action     :component-will-update
+                                             :component  this
+                                             :next-props next-props
+                                             :next-state next-state}))
+              (when-let [f (:component-will-update-fn opts)] (f this next-props next-state))))
+
+          :render
+          (fn [this]
+            (binding [*component* this]
+              (when ext-chan (put! ext-chan {:action    :render
+                                             :component this}))
+              (when-let [f (:render-fn opts)] (f this))
+              (let [{:keys [chan inputs action-state dyn-opts] :as state} (get-state this)]
+                (let [labels (comp-i18n this comp-name schema opts)
+                      title (get-in labels [:title])
+                      opts (merge-with merge opts dyn-opts)
+                      comp-class (get-in opts [comp-name :className])]
+                  [:div {:className (styles "panel panel-default" comp-class)
+                         :key       (full-name comp-name)
+                         :ref       (full-name comp-name)
+                         :id        (full-name comp-name)}
+                   (when title
+                     [:div {:className "panel-heading"}
+                      [:h3 {:className "panel-title"} title]])
+                   [:form {:className "panel-body"
+                           :role      "form"}
+                    (into [:div {:className "inputs-group"}]
+                          (if order
+                            (map (fn [k] (build-input this (assoc (k opts) :k k :k-sch
+                                                                           (su/get-sch schema k)
+                                                                           :i18n (k labels)))) order)
+                            (map (fn [[k t]]
+                                   (let [k (if (keyword? k) k (:k k))]
+                                     (build-input this (assoc (k opts) :k k :k-sch t :i18n (k labels))))) schema)))
+                    [:div {:className "panel-button"}
+                     [(build-component button-view state this {:state state
+                                                               :opts  {:k         :action
+                                                                       :labels    (or
+                                                                                    (:action labels)
+                                                                                    "Submit")
+                                                                       :comp-name comp-name
+                                                                       :attrs     (get-in opts
+                                                                                          [:action :attrs])}})]
+                     #_[(build-component button-view state this {:state state
+                                                                 :opts  {:k         :clean
+                                                                         :labels    (or (:clean labels) "Clear")
+                                                                         :comp-name comp-name
+                                                                         :attrs     (get-in opts [:clean :attrs])}})]]]]))))})))))

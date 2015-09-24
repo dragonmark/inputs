@@ -5,3 +5,4 @@ examples/contact/out/
 *.log
 *~
 pom.xml
+*.iml
