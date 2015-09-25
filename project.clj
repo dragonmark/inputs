@@ -1,4 +1,4 @@
-(defproject dragonmark/inputs "0.4.1"
+(defproject dragonmark/inputs "0.4.2"
   :description "Generate Web Input Form for React.js (Om or Reagent), validation included."
   :url "https://github.com/dragonmark/inputs"
 

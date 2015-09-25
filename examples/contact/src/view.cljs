@@ -51,62 +51,75 @@
                    :person_gender                       (s/enum "M" "F")
                    :person_married                      (s/eq true)}
 
-                  display-edn
-                  {:create-person        {:className "visible"}
-                   :validate-i18n-keys   false
+                  (fn [{:keys [data]}]
+                    (.log js/console "Data " (pr-str data))
+                    (let [v (rand-int 10)]
+                      (.log js/console "V is " v)
+                      (if (> 2 v)
+                        (set! (.-location js/window) "/")
+                        (some-> mounted deref :chan (in/dispatch [:update-input
+                                                                  [
+                                                                   [:add-error :person_name (str "yak "v)]]]))))
+                    (.log js/console "Yo"))
+                  {:create-person             {:className "visible"}
+                   :validate-i18n-keys        false
 
-                   :mount-info-atom mounted
+                   :mount-info-atom           mounted
+                   :component-will-unmount-fn (fn [x]
+                                                (.log js/console "Unmounted data "
+                                                      (when-let [sc (some-> mounted deref :schema-coercer)]
+                                                        (pr-str (sc x)))))
 
-                   :init                 {
-                                          :person_gender "F"
-                                          :person_size          187.50
-                                          :person_birthdate     (tomorrow)
-                                          :person_email         "h@h"
-                                          :person_email_confirm "d@h"
-                                          :person_married       true
-                                          :person_name          "MADELAINE"}
-                   :order                [:person_date_aller :person_date_retour
-                                          :person_first_name :person_name
-                                          :person_email
-                                          :person_email_confirm
-                                          :person_password
-                                          :person_gender
-                                          :person_birthdate :person_age
-                                          :person_size :person_married]
-                   :person_birthdate     {:label "Birthday"}
-                   :person_first_name    {:layout "horizontal"
-                                          :label "First Name"
-                                          :attrs  {:tabIndex 0}}
-                   :person_gender        {;:type "btn-group"
-                                          :label "Sex"
-                                          :label-order true}
-                   :person_password      {:label "Password" :type "password"}
-                   :person_name          {:label "Last Name"}
-                   :person_email         {:type  "email"
-                                          :label "Email"
-                                          :attrs {:tabIndex 0}}
-                   :person_email_confirm {:type "email"
-                                          :label "Email - Confirm"}
-                   :person_date_aller    {:type    "now"
-                                          :label "Leaving"
-                                          :labeled true
-                                          :attrs   {:tabIndex 0}}
-                   :mandatory            {:lable "Mandatory Field"}
-                   :person_size          {:label "Height"}
-                   :person_date_retour   {
-                                          :label "Return"}
+                   :init                      {
+                                               :person_gender        "F"
+                                               :person_size          187.50
+                                               :person_birthdate     (tomorrow)
+                                               :person_email         "h@h"
+                                               :person_email_confirm "d@h"
+                                               :person_married       true
+                                               :person_name          "MADELAINE"}
+                   :order                     [:person_date_aller :person_date_retour
+                                               :person_first_name :person_name
+                                               :person_email
+                                               :person_email_confirm
+                                               :person_password
+                                               :person_gender
+                                               :person_birthdate :person_age
+                                               :person_size :person_married]
+                   :person_birthdate          {:label "Birthday"}
+                   :person_first_name         {:layout "horizontal"
+                                               :label  "First Name"
+                                               :attrs  {:tabIndex 0}}
+                   :person_gender             {;:type "btn-group"
+                                               :label       "Sex"
+                                               :label-order true}
+                   :person_password           {:label "Password" :type "password"}
+                   :person_name               {:label "Last Name"}
+                   :person_email              {:type  "email"
+                                               :label "Email"
+                                               :attrs {:tabIndex 0}}
+                   :person_email_confirm      {:type  "email"
+                                               :label "Email - Confirm"}
+                   :person_date_aller         {:type    "now"
+                                               :label   "Leaving"
+                                               :labeled true
+                                               :attrs   {:tabIndex 0}}
+                   :mandatory                 {:lable "Mandatory Field"}
+                   :person_size               {:label "Height"}
+                   :person_date_retour        {
+                                               :label "Return"}
                    ;:person_size {:attrs {:type "number"}}
-                   :person_age           {:type    "stepper"
-                                          :label "Age"
-                                          :attrs   {:min "0" :max "10" :step 2 :size "lg"}}
-                   :person_married       {:layout "in-line"
-                                          :label "Married"}
-                   :validations          [[:positive [:person_age] :positive]
-                                          ;; [:can_drink [:person_age] "No under age drinking"]
-                                          [:after (at 0) :person_date_aller :date_aller]
-                                          [:min-length 16 :person_password]
-                                          [:email [:person_email_confirm :person_email] :bad_email]
-                                          [:equal [:person_email_confirm :person_email] :email_match]]}))
+                   :person_age                {:type  "stepper"
+                                               :label "Age"
+                                               :attrs {:min "0" :max "10" :step 2 :size "lg"}}
+                   :person_married            {:layout "in-line"
+                                               :label  "Married"}
+                   :validations               [[:positive [:person_age] :positive]
+                                               ;; [:can_drink [:person_age] "No under age drinking"]
+                                               [:after (at 0) :person_date_aller :date_aller]
+                                               [:min-length 6 :person_password]
+                                               [:email [:person_email_confirm :person_email] :bad_email]
+                                               [:equal [:person_email_confirm :person_email] :email_match]]}))
 
 (defn app
   []
@@ -115,18 +128,13 @@
    [:div [:button
           {:onClick (fn []
                       (some-> mounted deref :chan
-                              (put!
+                              (in/dispatch
                                 [:update-input [[:add-error :person_name "Yak Yak3" ]]])
                               )
                       nil
                       )}
           "Insert async stuff"]]
-   [(build-component input-view (:client app) nil {:opts {:action
-                                                          (fn [a b c d]
-                                                            (.log js/console "Data " (pr-str d))
-                                                            (.log js/console "Yo"))}
-
-                                                   :state (atom {})})]]
+   [(build-component input-view (:client app) nil nil)]]
   )
 
 

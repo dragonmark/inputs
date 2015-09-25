@@ -100,27 +100,30 @@
 
 (defmethod set-state! true
   [a b c]
-  (when-let [f @before-set-state] (f a b c))
-  (let [ret
-        (let [the-fn (cond
-                       (keyword? b)
-                       #(assoc % b c)
-                       (vector? b)
-                       #(assoc-in % b c)
-                       :else identity)]
-          (cond
-            (nil? a)
-            {}
+  (let [old (get-state a b)]
+    (when (not= old c)
+      (when-let [f @before-set-state] (f a b c))
+      (let [ret
+            (let [the-fn (cond
+                           (keyword? b)
+                           #(assoc % b c)
+                           (vector? b)
+                           #(assoc-in % b c)
+                           (true? b) (fn [_] c)
+                           :else identity)]
+              (cond
+                (nil? a)
+                {}
 
-            (satisfies? IDeref a)
+                (satisfies? IDeref a)
 
-            (swap! a the-fn)
+                (swap! a the-fn)
 
-            :else
-            (swap! (reagent/state-atom a) the-fn)))]
-    (if-let [f @after-set-state]
-      (f ret)
-      ret)))
+                :else
+                (swap! (reagent/state-atom a) the-fn)))]
+        (if-let [f @after-set-state]
+          (f ret)
+          ret)))))
 
 (defonce before-build-component (atom nil))
 (defonce after-build-component (atom nil))

@@ -345,11 +345,9 @@
 (defn field-validation!
   "Validate a single field of the local business state and update the local state."
   ([owner f]
-   (.log js/console "fv!" (pr-str f))
    (let [{:keys [inputs] :as state} (get-state owner)
          old-inputs inputs
          inputs (remove-field-error-and-server inputs f)]
-     (.log js/console "After " (inputs f))
      (let [new-business-state (field-validation f inputs state)]
        (when (not= old-inputs new-business-state)
          (set-state! owner [:inputs] new-business-state))))))

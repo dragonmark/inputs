@@ -24,6 +24,27 @@
 
 (def ^:dynamic *component* nil)
 
+(defn dispatch
+  [f v]
+
+  (cond
+    (nil? f)
+    nil
+
+
+    (fn? f) (f v)
+
+    (ifn? f) (f v)
+
+    (satisfies? ManyToManyChannel f)
+    (put! f v)
+
+    (instance? ManyToManyChannel f)
+    (put! f v)
+
+    :else nil
+    ))
+
 (defn cc
   ([] nil)
   ([a] a)
@@ -123,7 +144,7 @@
 
                                  :value     code
                                  :onClick   #(do
-                                               (put! chan [k code])
+                                               (dispatch chan [k code])
                                                nil)})]
                    (enum-label i18n code)]])
               (choose-iterator options)))])
@@ -149,8 +170,8 @@
                :value     code
                :onChange  #(-> nil)
                :onClick   #(do
-                             (put! chan [k code])
-                             (put! chan [:validate k])
+                             (dispatch chan [k code])
+                             (dispatch chan [:validate k])
 
                              nil)}
                (enum-label i18n code)]))
@@ -185,8 +206,8 @@
                :className style
                :onClick   #(when (or (nil? min)
                                      (and min (<= (int min) (minus value))))
-                             (put! chan [k (str (minus value))])
-                             (put! chan [:validate k])
+                             (dispatch chan [k (str (minus value))])
+                             (dispatch chan [:validate k])
                              nil)} "-"]
      [:input {:className "input-stepper"
               :size      (if (str/blank? value) 1 (count (str value)))
@@ -197,8 +218,8 @@
                :className style
                :onClick   #(when (or (nil? max)
                                      (and max (<= (plus value) (int max))))
-                             (put! chan [k (str (plus value))])
-                             (put! chan [:validate k])
+                             (dispatch chan [k (str (plus value))])
+                             (dispatch chan [:validate k])
                              nil)} "+"]]))
 
 
@@ -209,13 +230,13 @@
                    {:placeholder d/default-fmt
                     :value       (d/display-date date)
                     :onChange    #(do
-                                    (put! chan [k (e-value %)])
-                                    (put! chan [:validate k])
+                                    (dispatch chan [k (e-value %)])
+                                    (dispatch chan [:validate k])
                                     nil)
                     :onBlur      #(let [v (e-value %)]
-                                    (put! chan [k (when-not (str/blank? v) (d/parse v))])
-                                    (put! chan [:focus k])
-                                    (put! chan [:validate k])
+                                    (dispatch chan [k (when-not (str/blank? v) (d/parse v))])
+                                    (dispatch chan [:focus k])
+                                    (dispatch chan [:validate k])
                                     nil)})]))
 
 (defmethod magic-input "date"
@@ -225,13 +246,13 @@
                    {:type     "date"
                     :value    (d/display-date "yyyy-MM-dd" date)
                     :onChange #(do
-                                 (put! chan [k (e-value %)])
-                                 (put! chan [:validate k])
+                                 (dispatch chan [k (e-value %)])
+                                 (dispatch chan [:validate k])
                                  nil)
                     :onBlur   #(let [v (e-value %)]
-                                 (put! chan [k (when-not (str/blank? v) (d/parse "yyyy-MM-dd" v))])
-                                 (put! chan [:focus k])
-                                 (put! chan [:validate k])
+                                 (dispatch chan [k (when-not (str/blank? v) (d/parse "yyyy-MM-dd" v))])
+                                 (dispatch chan [:focus k])
+                                 (dispatch chan [:validate k])
                                  nil)})]))
 
 
@@ -240,8 +261,8 @@
   (let [value (:value attrs)]
     [:input (merge attrs {:checked  (js/Boolean value)
                           :onChange #(do
-                                       (put! chan [k (-> % .-target .-checked)])
-                                       (put! chan [:validate k])
+                                       (dispatch chan [k (-> % .-target .-checked)])
+                                       (dispatch chan [:validate k])
                                        nil)
                           :type     "checkbox"})]))
 
@@ -256,8 +277,8 @@
                         :className      "btn"
                         :preventDefault  true
                         :onClick        #(do
-                                           (put! chan [k (js/Date.)])
-                                           (put! chan [:validate k])
+                                           (dispatch chan [k (js/Date.)])
+                                           (dispatch chan [:validate k])
                                            nil)})])
 
 
@@ -343,8 +364,8 @@
     (.decorate dp node )
     (goog.events/listen dp goog.ui.DatePicker.Events.CHANGE
                         #(do
-                           (put! chan [k  (d/goog-date->js-date (.-date %))])
-                           (put! chan [:validate k])
+                           (dispatch chan [k  (d/goog-date->js-date (.-date %))])
+                           (dispatch chan [:validate k])
                            nil))))
 
 (defn handle-date-fields!
@@ -414,7 +435,7 @@
                    :className "close"
                    :data-dismiss "alert"
                    :onClick #(do
-                               (put! chan [:kill-mess (:k m)])
+                               (dispatch chan [:kill-mess (:k m)])
                                nil
                                )} "x"]
          mess]))}))
@@ -441,7 +462,7 @@
                                 :disabled  (boolean btn-style)
                                 :className (styles "btn btn-primary has-spinner has-error" btn-style)
                                 :onClick   #(do
-                                              (put! chan k)
+                                             (dispatch chan k)
                                               nil)})
           (label labels k opts)
           [:span {:className "error"}
@@ -518,7 +539,6 @@
 ;___________________________________________________________|
 
 
-
 (defn error-mess
   "Finds the i18n message for the first error on a field."
   [owner kbs lang opts]
@@ -566,7 +586,7 @@
                              :opts  {:k      (:k opts)
                                      :type   "error"
                                      :action #(do
-                                                (put! chan [:kill-mess (:k opts)])
+                                                (dispatch chan [:kill-mess (:k opts)])
                                                 nil)}})]))]]))
 
 (defmethod layout-input "in-line"
@@ -593,7 +613,7 @@
                              :opts  {:k      (:k opts)
                                      :type   "error"
                                      :action #(do
-                                                (put! chan [:kill-mess (:k opts)])
+                                                (dispatch chan [:kill-mess (:k opts)])
                                                 nil)}})]))]
      (when (i/desc opts) [:p {:className "description"} (i/desc opts)])
      (when (i/html-desc opts) (html (i/html-desc opts)))]))
@@ -614,15 +634,15 @@
                  :ref         (full-name k)
                  :value       (:value kbs)
                  :onBlur      (fn [_]
-                                (put! chan [:focus k])
-                                (put! chan [:validate k])
+                                (dispatch chan [:focus k])
+                                (dispatch chan [:validate k])
                                 nil)
                  :onFocus     (fn [_]
-                                 (put! chan [:focus k])
+                                 (dispatch chan [:focus k])
                                  nil)
                  :onChange    #(do
-                                 (put! chan [k (e-value %)])
-                                 (put! chan [:validate k])
+                                 (dispatch chan [k (e-value %)])
+                                 (dispatch chan [:validate k])
                                  nil)
                  :placeholder (get-in opts [:i18n :ph])
                  :disabled    (:disabled  kbs)}
@@ -644,42 +664,60 @@
    :in-error :in-error})
 
 (defn run-exec
-  [m cmds]
+  [obj cmds]
 
-  (reduce (fn [m [cmd & rst]]
-            (case cmd
-              :remove-error
-              (let [fld (first rst)
-                    cv (dissoc (fld m) :async-error)
-                    cv (update cv :valid #(let [e (:error %)]
-                                           (not
-                                             (boolean
-                                               (or (nil? e)
-                                                   (empty? e))))))
-                    ]
-                (assoc m (first rst) cv))
+      (doseq
+        [[cmd & rst] cmds]
+        (case
+          cmd
 
-              :add-error
-              (let [[fld errs] rst]
-                (update m fld #(-> %
-                                   (assoc :valid false)
-                                   (update :async-error cc errs))))
+          :action-state
+          (set-state! obj [:action-state :action] (first rst))
 
-              :assoc
-              (assoc m (first rst) (second rst))
+          :remove-error
+          (update-state! obj [:inputs]
+                         (fn [m]
+                           (let [fld (first rst)
+                                 cv (dissoc (fld m) :async-error)
+                                 cv (update cv :valid #(let [e (:error %)]
+                                                        (not
+                                                          (boolean
+                                                            (or (nil? e)
+                                                                (empty? e))))))
+                                 ]
+                             (assoc m fld cv))))
 
-              :dissoc
-              (dissoc m (first rst))
+          :add-error
+          (let [[fld errs] rst]
+            (set-state! obj [:action-state :action] :in-error)
+            (update-state! obj [:inputs fld]
+                           #(-> %
+                                (assoc :valid false)
+                                (update :async-error cc errs))))
 
-              :assoc-in
-              (assoc-in m (first rst) (second rst))
+          :assoc-in
+          (set-state! obj (first rst) (second rst))
 
-              :dissoc-in
-              (let [f (first rst)
-                    v (-> f butlast vec)
-                    i (last f)]
-                (update-in m v dissoc i))))
-          m cmds))
+          :dissoc-in
+          (let [f (first rst)
+                v (-> f butlast vec)
+                i (last f)]
+               (update-state! obj v #(dissoc % i)))))
+
+  )
+
+(defn do-meta-validation
+  [this]
+  (let [{:keys [inputs] :as state} (get-state this)
+        new-bs (va/full-validation inputs state)
+        no-error (va/no-error? new-bs)]
+
+    (if no-error
+      (set-state! this [:action-state :action] nil)
+      (set-state! this [:action-state :action] :in-error))
+    (set-state! this [:inputs] new-bs)
+    no-error)
+  )
 
 (s/defn
   make-input-comp
@@ -703,6 +741,7 @@
    (let [order (:order opts)
          ext-chan (:ext-chan opts)
          verily-rules (:validations opts)
+
          mount-info-atom (:mount-info-atom opts)
          schema-coercer (coerce/coercer schema va/validation-coercer)
          validation (va/build-verily-validator verily-rules)
@@ -720,7 +759,6 @@
                                         created-chan
                                         clean-chan
                                         ]} (get-state this)]
-                            (close! chan)
                             (close! action-chan)
                             (close! created-chan)
                             (close! clean-chan)
@@ -729,9 +767,30 @@
      (fn [app]
        (create-component
          {:get-initial-state
-          (fn [_]
+          (fn [this]
             {:opts             opts
-             :chan             (chan 10)
+             :chan             (fn [[k v]]
+                                 (binding [*component* this]
+                                   (condp = k
+                                     :focus (do
+                                              (js/setTimeout #(update-state! this [:inputs v :focus] not) 500)
+                                              nil)
+                                     :kill-mess (update-state! this [:inputs v] #(dissoc % :error))
+                                     :validate (do
+                                                 (va/field-validation! this v)
+                                                 (do-meta-validation this))
+
+                                     :update-input
+                                     (do
+                                       (run-exec this v))
+
+                                     (let [coerce (get typing-controls k (fn [n _] n))
+                                           ptfn (get-in opts [k :post-typing] identity)
+                                           v (ptfn v)
+                                           old-val (get-state this [:inputs k :value])
+                                           coerced (coerce v old-val)]
+                                       (set-state! this [:inputs k :value] coerced)))))
+
              :action-chan      (chan 10)
              :created-chan     (chan 10)
              :clean-chan       (chan 10)
@@ -746,21 +805,12 @@
           :component-will-mount
           (fn [this]
             (binding [*component* this]
-              (when ext-chan (put! ext-chan {:action :component-will-mount :component this}))
+              (when ext-chan (dispatch ext-chan {:action :component-will-mount :component this}))
               (when-let [f (:component-will-mount-fn opts)] (f this))
               (let [{:keys [chan action-chan created-chan clean-chan]} (get-state this)
 
-                    do-validation (fn []
-                                    (let [{:keys [inputs] :as state} (get-state this)
-                                          new-bs (va/full-validation inputs state)
-                                          no-error (va/no-error? new-bs)]
-
-                                      (if no-error
-                                        (set-state! this [:action-state :action] nil)
-                                        (set-state! this [:action-state :action] :in-error))
-                                      (set-state! this [:inputs] new-bs)
-                                      no-error))]
-                (when mount-info-atom (reset! mount-info-atom {:component this :chan chan}))
+                    do-validation (partial do-meta-validation this)]
+                (when mount-info-atom (reset! mount-info-atom {:component this :chan chan :schema-coercer schema-coercer}))
                 (when-not (get-in opts [:action :no-reset]) (set-state! this :inputs initial-bs))
                 (set-state! this :action-state initial-action-state)
                 (do-validation)
@@ -798,66 +848,46 @@
                                 raw (va/pre-validation v)
                                 coerced (schema-coercer raw)]
                             (when-let [to-do action]
-                              (if (satisfies? ManyToManyChannel to-do)
-                                (put! to-do [coerced app this])
-
+                              (let [to-send {:data           coerced
+                                             :app            app
+                                             :this           this
+                                             :schema-coercer schema-coercer
+                                             }]
                                 (js/setTimeout
-                                  #(to-do coerced app this)
-                                  10))
+                                  #(dispatch to-do to-send) 10))
                               )
-                            ;; (close-channels this)
-                            ))))))
 
-                (go
-                  (loop []
-                    (when-let [[k v] (<! chan)]
-                      (binding [*component* this]
-                        (condp = k
-                          :focus (update-state! this [:inputs v :focus] not)
-                          :kill-mess (update-state! this [:inputs v] #(dissoc % :error))
-                          :validate (do
-                                      (va/field-validation! this v)
-                                      (do-validation))
-
-                          :update-input
-                          (set-state! this :inputs (-> this (get-state :inputs) (run-exec v)))
-
-                          (let [coerce (get typing-controls k (fn [n _] n))
-                                ptfn (get-in opts [k :post-typing] identity)
-                                v (ptfn v)
-                                old-val (get-state this [:inputs k :value])
-                                coerced (coerce v old-val)]
-                            (set-state! this [:inputs k :value] coerced))))
+                            )))
                       (recur)))))))
 
           :component-did-mount
           (fn [this]
             (binding [*component* this]
-              (when ext-chan (put! ext-chan {:action :component-did-mount :component this}))
+              (when ext-chan (dispatch ext-chan {:action :component-did-mount :component this}))
               (when-let [f (:component-did-mount-fn opts)] (f this))
               (handle-date-fields! this d/default-fmt opts)))
 
           :component-will-unmount
           (fn [this]
             (binding [*component* this]
-              (when ext-chan (put! ext-chan {:action :component-will-unmount :component this}))
+              (when ext-chan (dispatch ext-chan {:action :component-will-unmount :component this}))
               (when-let [f (:component-will-unmount-fn opts)] (f this))
               (close-channels this)))
 
           :component-will-update
           (fn [this next-props next-state]
             (binding [*component* this]
-              (when ext-chan (put! ext-chan {:action     :component-will-update
-                                             :component  this
-                                             :next-props next-props
-                                             :next-state next-state}))
+              (when ext-chan (dispatch ext-chan {:action     :component-will-update
+                                                 :component  this
+                                                 :next-props next-props
+                                                 :next-state next-state}))
               (when-let [f (:component-will-update-fn opts)] (f this next-props next-state))))
 
           :render
           (fn [this]
             (binding [*component* this]
-              (when ext-chan (put! ext-chan {:action    :render
-                                             :component this}))
+              (when ext-chan (dispatch ext-chan {:action    :render
+                                                 :component this}))
               (when-let [f (:render-fn opts)] (f this))
               (let [{:keys [chan inputs action-state dyn-opts] :as state} (get-state this)]
                 (let [labels (comp-i18n this comp-name schema opts)
