@@ -1,4 +1,4 @@
-(defproject dragonmark/inputs "0.4.2"
+(defproject dragonmark/inputs "0.4.4"
   :description "Generate Web Input Form for React.js (Om or Reagent), validation included."
   :url "https://github.com/dragonmark/inputs"
 
@@ -28,16 +28,18 @@
 
   :codox {:language :clojurescript
           :include [dragonmark.inputs.date-utils dragonmark.inputs.core]}
-  :resource-paths ["examples"]
+
 
   :cljsbuild {
               :builds [{:id "dev"
+                        :resource-paths ["examples"]
                         :source-paths ["src"  "examples/contact/src"]
                         :compiler {:output-to "examples/contact/out/inputs.js"
                                    :output-dir "examples/contact/out"
                                    :optimizations :none
                                    :source-map true}}
                        {:id "simple"
+                        :resource-paths ["examples"]
                         :source-paths ["src"  "examples/contact/src"]
                         :compiler {:output-to "examples/contact/out/main.js"
                                    :optimizations :simple
@@ -45,7 +47,7 @@
                                    :preamble ["react/react.min.js"]
                                    :externs ["react/externs/react.js"]}}
                        {:id "release"
-                        :source-paths ["src"  "examples/contact/src"]
+                        :source-paths ["src" ]
                         :compiler {:output-to "examples/contact/out/main.js"
                                    :optimizations :advanced
                                    ;:closure-warnings {:check-useless-code :on}
