@@ -342,6 +342,8 @@
         (remove-field-error inputs fk))
       (remove-field-error inputs fk))))
 
+(declare update-action!)
+
 (defn field-validation!
   "Validate a single field of the local business state and update the local state."
   ([owner f]
@@ -350,7 +352,9 @@
          inputs (remove-field-error-and-server inputs f)]
      (let [new-business-state (field-validation f inputs state)]
        (when (not= old-inputs new-business-state)
-         (set-state! owner [:inputs] new-business-state))))))
+         (set-state! owner [:inputs] new-business-state)
+         (update-action! owner)
+         )))))
 
 
 (defn full-validation
@@ -363,3 +367,13 @@
   [bs :- sch-business-state]
   (not-any? (fn [[k v]]
               (false? (:valid v))) bs))
+
+(defn update-action!
+  [this]
+  (let [{:keys [inputs] :as state} (get-state this)
+        no-error (no-error? inputs)]
+    (if no-error
+      (set-state! this [:action-state :action] nil)
+      (set-state! this [:action-state :action] :in-error))
+    no-error)
+  )

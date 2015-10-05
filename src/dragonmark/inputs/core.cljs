@@ -387,13 +387,38 @@
 ;___________________________________________________________|
 
 
-(defn tooltip
+(defn default-tooltip
   "Display a tooltip next to the field to inform the user.
   options :
   :k the target field
   :type serves to build the css class tooltip-type
   :action attach a function when closing the tooltip"
   [app owner opts]
+  (let [the-id (str (name (:k opts)) "-tooltip")]
+    (create-component
+      {:component-did-mount
+       (fn
+         [this]
+         (let [tool (.getElementById js/document the-id)
+               elem (.getElementById js/document (full-name (:k opts)))
+               rect-tool (.getBoundingClientRect tool)
+               rect (.getBoundingClientRect elem)
+               delta (* 0.5 (- (.-height rect) (.-height rect-tool)))]
+           (set! (.-left (.-style tool)) (str (+ 5 (.-width rect)) "px"))
+           (set! (.-top (.-style tool)) (str delta "px"))))
+       :render
+       (fn
+         [_]
+         [:div {:className (styles "popover right" (str "popover-" (:type opts)))
+                :role "alert"
+                :id the-id
+                :ref (str (name (:k opts)) "-tooltip")}
+          [:div {:className "arrow"} ""]
+          (when (:title app)  [:div {:className "popover-title"} (:title app)])
+          [:div {:className "popover-content"} (:mess app)
+           [:div {:type "button"
+                  :className "close"
+                  :onClick (:action opts)} "x"]]])})) [app owner opts]
   (let [the-id (str (name (:k opts)) "-tooltip")]
     (create-component
      {:component-did-mount
@@ -419,6 +444,18 @@
           [:div {:type "button"
                  :className "close"
                  :onClick (:action opts)} "x"]]])})))
+
+(def ^:dynamic *tooltip-func* nil)
+
+
+
+(def tooltip-atom (atom default-tooltip))
+
+(defn tooltip
+  []
+  (or
+    *tooltip-func*
+    @tooltip-atom))
 
 
 (defn message
@@ -575,13 +612,13 @@
         (magic-input {:chan chan :opts opts}))
       (when (and (i/info opts)
                  (:focus kbs))
-        [(build-component tooltip {:mess  (i/info opts)
+        [(build-component (tooltip) {:mess  (i/info opts)
                                    :title (i/info-title opts)} owner
                           {
                            :opts {:k (:k opts) :type "info"}})])
       (let [mess (error-mess owner kbs lang opts)]
         (when (and invalid mess)
-          [(build-component tooltip {:mess mess} owner
+          [(build-component (tooltip) {:mess mess} owner
                             {:state  {:mess mess}
                              :opts  {:k      (:k opts)
                                      :type   "error"
@@ -600,7 +637,7 @@
         (magic-input {:chan chan :opts opts})
         (when (and (i/info opts)
                    (:focus opts))
-          [(build-component tooltip {:mess  (i/info opts)
+          [(build-component (tooltip) {:mess  (i/info opts)
                                      :title (i/info-title opts)} owner
                                      {:state {:mess  (i/info opts)
                                               :title (i/info-title opts)}
@@ -608,7 +645,7 @@
        [:div (i/label opts)]]
       (let [mess (error-mess owner kbs lang opts)]
         (when (and invalid mess)
-          [(build-component tooltip {:mess mess} owner
+          [(build-component (tooltip) {:mess mess} owner
                             {:state  {:mess mess}
                              :opts  {:k      (:k opts)
                                      :type   "error"
@@ -689,11 +726,12 @@
 
           :add-error
           (let [[fld errs] rst]
-            (set-state! obj [:action-state :action] :in-error)
-            (update-state! obj [:inputs fld]
-                           #(-> %
-                                (assoc :valid false)
-                                (update :async-error cc errs))))
+            (when (some-> obj get-state :inputs fld)
+              (set-state! obj [:action-state :action] :in-error)
+              (update-state! obj [:inputs fld]
+                             #(-> %
+                                  (assoc :valid false)
+                                  (update :async-error cc errs)))))
 
           :assoc-in
           (set-state! obj (first rst) (second rst))
@@ -745,7 +783,6 @@
          mount-info-atom (:mount-info-atom opts)
          schema-coercer (coerce/coercer schema va/validation-coercer)
          validation (va/build-verily-validator verily-rules)
-         checker (partial va/validate schema-coercer va/transform-schema-errors)
          unit-coercers (va/build-unit-coercers schema)
          unit-validators (va/unit-schema-validators unit-coercers)
          remove-errs-fn (va/build-error-remover verily-rules va/inter-fields-rules)
@@ -773,7 +810,7 @@
                                  (binding [*component* this]
                                    (condp = k
                                      :focus (do
-                                              (js/setTimeout #(update-state! this [:inputs v :focus] not) 500)
+                                              ;; (js/setTimeout #(update-state! this [:inputs v :focus] not) 500)
                                               nil)
                                      :kill-mess (update-state! this [:inputs v] #(dissoc % :error))
                                      :validate (do

@@ -1,4 +1,4 @@
-(defproject dragonmark/inputs "0.4.4"
+(defproject dragonmark/inputs "0.4.5"
   :description "Generate Web Input Form for React.js (Om or Reagent), validation included."
   :url "https://github.com/dragonmark/inputs"
 
@@ -6,7 +6,7 @@
                  [org.clojure/clojurescript "1.7.48"  :scope "provided"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
 
-                 [prismatic/schema "1.0.0"]
+                 [prismatic/schema "1.0.1"]
                  [jkkramer/verily "0.6.0"]
                  [sablono "0.2.22"]
 
